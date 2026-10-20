@@ -18,7 +18,7 @@ Future<void> main() async {
     statusBarColor: Colors.transparent,
   ));
 
-  PythonBridge.instance.init();
+  await PythonBridge.instance.init();
 
   final SettingsModel settings = SettingsModel();
   final WorkspaceModel workspace = WorkspaceModel();

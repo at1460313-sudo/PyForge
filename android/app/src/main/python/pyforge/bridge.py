@@ -216,7 +216,7 @@ def run_code(run_id, file_path, source):
         result["cancelled"] = True
     except SystemExit as exc:
         code_value = exc.code
-        result["exitCode"] = 0 if code_value is None else int(code_value or 1)
+        result["exitCode"] = 0 if code_value is None else 0 if code_value is None else int(code_value)
     except BaseException:
         result["ok"] = False
         result["error"] = _error_payload()
@@ -295,7 +295,7 @@ def debug_run(run_id, file_path, source, breakpoints_json):
         result["stoppedByUser"] = True
     except SystemExit as exc:
         code_value = exc.code
-        result["exitCode"] = 0 if code_value is None else int(code_value or 1)
+        result["exitCode"] = 0 if code_value is None else 0 if code_value is None else int(code_value)
     except BaseException:
         result["ok"] = False
         result["error"] = _error_payload()

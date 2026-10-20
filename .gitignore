@@ -39,3 +39,7 @@ app.*.map.json
 # Android Studio build artifacts
 android/app/.cxx/
 android/local.properties
+
+/android/key.properties
+*.keystore
+*.jks
