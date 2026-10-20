@@ -154,7 +154,7 @@ void main() {
         .state<ScrollableState>(find.byType(Scrollable).first)
         .position
         .pixels;
-    expect(before, lessThan(0.0) == false ? greaterThan(0.0) : greaterThan(0.0));
+    expect(before, greaterThan(0.0)); // actually scrolled up
     // New output arrives: the view must stay where the user put it.
     for (int i = 100; i < 140; i++) {
       await emit({

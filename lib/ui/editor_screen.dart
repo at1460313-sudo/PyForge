@@ -230,7 +230,9 @@ class _EditorScreenState extends State<EditorScreen> {
     final SettingsModel settings = context.watch<SettingsModel>();
     final RunModel run = context.watch<RunModel>();
     final DebuggerModel debugger = context.watch<DebuggerModel>();
-    final AiModel ai = context.watch<AiModel>();
+    // Subscribe: this screen must rebuild when AI state changes, even
+    // though it no longer reads the model directly.
+    context.watch<AiModel>();
     final ColorScheme scheme = Theme.of(context).colorScheme;
     final SyntaxThemeDef syntax = SyntaxThemes.byId(settings.syntaxThemeId);
 
