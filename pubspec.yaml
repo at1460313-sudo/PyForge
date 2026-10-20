@@ -1,0 +1,41 @@
+name: pyforge
+description: "PyForge — a premium, zero-friction offline Python IDE for Android."
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  provider: ^6.1.2
+
+  # Code editor (built on re_highlight for syntax themes)
+  re_editor: ^0.10.0
+  re_highlight: ^0.0.3
+
+  # Secure storage for API keys (BYOK)
+  flutter_secure_storage: ^9.2.2
+
+  # Networking (AI providers only — everything else is offline)
+  http: ^1.2.1
+
+  # Local persistence
+  shared_preferences: ^2.3.2
+  path_provider: ^2.1.3
+
+  # Sharing / exporting files
+  share_plus: ^9.0.0
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
