@@ -37,7 +37,7 @@ const List<String> _kTypes = <String>[
   'Optional', 'Sequence', 'Set', 'Tuple', 'Type', 'Union',
 ];
 
-final Mode _escape = Mode(match: [r'\\.'], scope: const {0: 'string'});
+final Mode _escape = Mode(match: [r'\\.'], scope: const <int, String>{1: 'string'});
 
 final Mode pyforgePythonMode = Mode(
   name: 'python',
@@ -80,12 +80,11 @@ final Mode pyforgePythonMode = Mode(
     Mode(className: 'string', begin: "[fFrRbBuU]{0,2}'", end: "'"),
     Mode(className: 'string', begin: '[fFrRbBuU]{0,2}"', end: '"'),
     // Numbers (int, float, hex, oct, bin, underscores).
+    // NOTE: one regex with alternation. A List passed to `match:` means a
+    // *sequence* of regexes (and requires a scope map), not alternatives.
     Mode(
       className: 'number',
-      match: [
-        r'\b\d[\d_]*(\.\d+)?([eE][+-]?\d+)?[jJ]?\b',
-        r'\b0[xXoObB][0-9a-fA-F_]+\b',
-      ],
+      begin: r'\b(?:0[xXoObB][0-9a-fA-F_]+|\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?[jJ]?)\b',
     ),
     // def / class names.
     Mode(
@@ -99,10 +98,10 @@ final Mode pyforgePythonMode = Mode(
     // Decorators.
     Mode(className: 'meta', begin: r'^\s*@', end: r'(?=#)|$'),
     // Rainbow brackets by type.
-    Mode(match: [r'[()]'], scope: const <int, String>{0: 'symbol'}),
-    Mode(match: [r'[\[\]]'], scope: const <int, String>{0: 'attr'}),
-    Mode(match: [r'[{}]'], scope: const <int, String>{0: 'variable'}),
+    Mode(match: [r'[()]'], scope: const <int, String>{1: 'symbol'}),
+    Mode(match: [r'[\[\]]'], scope: const <int, String>{1: 'attr'}),
+    Mode(match: [r'[{}]'], scope: const <int, String>{1: 'variable'}),
     // self.
-    Mode(match: [r'\bself\b'], scope: const <int, String>{0: 'keyword'}),
+    Mode(match: [r'\bself\b'], scope: const <int, String>{1: 'keyword'}),
   ],
 );

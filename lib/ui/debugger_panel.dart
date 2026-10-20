@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../theme/app_theme.dart';
 import 'package:flutter/services.dart';
 
 import '../state/run_model.dart';
@@ -135,7 +137,7 @@ class DebuggerPanel extends StatelessWidget {
                                   Text(
                                     entry.key,
                                     style: TextStyle(
-                                      fontFamily: 'monospace',
+                                      fontFamily: kMonoFont,
                                       fontSize: 12.5,
                                       color: scheme.primary,
                                       fontWeight: FontWeight.w700,
@@ -146,7 +148,7 @@ class DebuggerPanel extends StatelessWidget {
                                     child: Text(
                                       entry.value,
                                       style: const TextStyle(
-                                        fontFamily: 'monospace',
+                                        fontFamily: kMonoFont,
                                         fontSize: 12.5,
                                       ),
                                     ),

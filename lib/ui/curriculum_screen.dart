@@ -8,7 +8,9 @@ import '../editor/python_mode.dart';
 import '../services/python_bridge.dart';
 import '../state/progress_model.dart';
 import '../state/settings_model.dart';
+import '../theme/app_theme.dart';
 import '../theme/syntax_themes.dart';
+import 'widgets/app_widgets.dart';
 
 /// The learning hub: lessons, coding challenges (auto-graded on-device)
 /// and syntax cheat sheets. Fully offline.
@@ -18,32 +20,109 @@ class CurriculumScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ProgressModel progress = context.watch<ProgressModel>();
+    final ColorScheme scheme = Theme.of(context).colorScheme;
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Learn'),
-          bottom: TabBar(
-            tabs: <Widget>[
-              Tab(
-                  icon: const Icon(Icons.school_outlined, size: 18),
-                  text: 'Lessons'),
-              Tab(
-                  icon: const Icon(Icons.emoji_events_outlined, size: 18),
-                  text: 'Challenges'),
-              Tab(
-                  icon: const Icon(Icons.bolt_outlined, size: 18),
-                  text: 'Cheat sheets'),
-            ],
-          ),
-        ),
-        body: TabBarView(
+        appBar: AppBar(title: const Text('Learn Python')),
+        body: Column(
           children: <Widget>[
-            _LessonList(progress: progress),
-            const _ChallengeList(),
-            const _CheatSheetList(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: _LearnHeader(progress: progress),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: scheme.outlineVariant),
+                ),
+                child: const TabBar(
+                  tabs: <Widget>[
+                    Tab(height: 42, text: 'Lessons'),
+                    Tab(height: 42, text: 'Challenges'),
+                    Tab(height: 42, text: 'Cheats'),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(
+              child: TabBarView(
+                children: <Widget>[
+                  _LessonList(progress: progress),
+                  const _ChallengeList(),
+                  const _CheatSheetList(),
+                ],
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Overall course progress: a ring plus lessons / challenges counters.
+class _LearnHeader extends StatelessWidget {
+  const _LearnHeader({required this.progress});
+
+  final ProgressModel progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final int lessons = progress.readLessons
+        .where((String id) => kLessons.any((Lesson l) => l.id == id))
+        .length;
+    final int challenges = progress.completedChallenges
+        .where((String id) => kChallenges.any((Challenge c) => c.id == id))
+        .length;
+    final int total = kLessons.length + kChallenges.length;
+    final double value = total == 0 ? 0 : (lessons + challenges) / total;
+    return AppCard(
+      gradient: heroGradient(scheme),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: <Widget>[
+          ProgressRing(
+            value: value,
+            size: 76,
+            stroke: 9,
+            child: Text('${(value * 100).round()}%',
+                style:
+                    const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  value >= 1 ? 'Course complete' : 'Your course progress',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: <Widget>[
+                    Pill(
+                        icon: Icons.menu_book_rounded,
+                        label: '$lessons/${kLessons.length} lessons',
+                        color: scheme.secondary),
+                    Pill(
+                        icon: Icons.emoji_events_rounded,
+                        label: '$challenges/${kChallenges.length} challenges',
+                        color: scheme.flame),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -61,45 +140,79 @@ class _LessonList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
+    final int nextIndex =
+        kLessons.indexWhere((Lesson l) => !progress.readLessons.contains(l.id));
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
       itemCount: kLessons.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (BuildContext context, int index) {
         final Lesson lesson = kLessons[index];
         final bool done = progress.readLessons.contains(lesson.id);
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Card(
-            child: ListTile(
-              contentPadding: const EdgeInsets.all(14),
-              leading: CircleAvatar(
-                backgroundColor: done
-                    ? Colors.green.withValues(alpha: 0.2)
-                    : scheme.primary.withValues(alpha: 0.15),
-                child: Icon(
-                  done ? Icons.check : Icons.play_arrow,
-                  color: done ? Colors.green : scheme.primary,
+        final bool isNext = index == nextIndex;
+        final Color accent = done
+            ? scheme.success
+            : (isNext ? scheme.primary : scheme.secondary);
+        return AppCard(
+          padding: const EdgeInsets.all(14),
+          color: isNext ? scheme.tint(scheme.primary, 0.07) : null,
+          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (BuildContext routeContext) => LessonPage(lesson: lesson),
+          )),
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: done
+                    ? Icon(Icons.check_rounded, color: accent, size: 26)
+                    : Text('${index + 1}',
+                        style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w800,
+                            color: accent)),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(lesson.title,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 3),
+                    Text(lesson.summary,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 13.5, height: 1.35, color: scheme.muted)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: <Widget>[
+                        Pill(
+                            icon: Icons.schedule_rounded,
+                            label: '${lesson.minutes} min'),
+                        if (isNext)
+                          Pill(
+                              icon: Icons.bolt_rounded,
+                              label: 'Up next',
+                              color: scheme.primary),
+                        if (done)
+                          Pill(label: 'Completed', color: scheme.success),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              title: Text(lesson.title,
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w800)),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(lesson.summary,
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        color: scheme.onSurface.withValues(alpha: 0.65))),
-              ),
-              trailing: Text('${lesson.minutes} min',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: scheme.onSurface.withValues(alpha: 0.5))),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (BuildContext routeContext) =>
-                        _LessonPage(lesson: lesson),
-                  )),
-            ),
+              Icon(Icons.chevron_right_rounded, color: scheme.faint),
+            ],
           ),
         );
       },
@@ -107,8 +220,9 @@ class _LessonList extends StatelessWidget {
   }
 }
 
-class _LessonPage extends StatelessWidget {
-  const _LessonPage({required this.lesson});
+/// A single lesson (public so the Home screen can open it directly).
+class LessonPage extends StatelessWidget {
+  const LessonPage({super.key, required this.lesson});
 
   final Lesson lesson;
 
@@ -123,9 +237,9 @@ class _LessonPage extends StatelessWidget {
         icon: const Icon(Icons.emoji_events_outlined),
         label: const Text('Start challenge'),
         onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (BuildContext routeContext) =>
-                  _ChallengePage(challengeId: lesson.challengeId),
-            )),
+          builder: (BuildContext routeContext) =>
+              ChallengePage(challengeId: lesson.challengeId),
+        )),
       ),
       body: ListView(
         padding: const EdgeInsets.all(18),
@@ -234,7 +348,7 @@ class _MarkdownLite extends StatelessWidget {
       ),
       child: Text(
         code,
-        style: const TextStyle(fontFamily: 'monospace', fontSize: 12.5),
+        style: const TextStyle(fontFamily: kMonoFont, fontSize: 12.5),
       ),
     );
   }
@@ -250,7 +364,7 @@ class _MarkdownLite extends StatelessWidget {
           fontSize: 13.5,
           height: 1.45,
           color: scheme.onSurface,
-          fontFamily: i % 2 == 1 ? 'monospace' : null,
+          fontFamily: i % 2 == 1 ? kMonoFont : null,
         ),
       ));
     }
@@ -269,39 +383,58 @@ class _ChallengeList extends StatelessWidget {
   Widget build(BuildContext context) {
     final ProgressModel progress = context.watch<ProgressModel>();
     final ColorScheme scheme = Theme.of(context).colorScheme;
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
       itemCount: kChallenges.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (BuildContext context, int index) {
         final Challenge challenge = kChallenges[index];
         final bool done = progress.completedChallenges.contains(challenge.id);
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Card(
-            child: ListTile(
-              leading: Icon(
-                done ? Icons.emoji_events : Icons.lock_outline,
-                color: done
-                    ? Colors.amber
-                    : scheme.onSurface.withValues(alpha: 0.4),
+        final Color accent = done ? scheme.flame : scheme.violet;
+        return AppCard(
+          padding: const EdgeInsets.all(14),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (BuildContext routeContext) =>
+                ChallengePage(challengeId: challenge.id),
+          )),
+          child: Row(
+            children: <Widget>[
+              IconBadge(
+                icon:
+                    done ? Icons.emoji_events_rounded : Icons.terminal_rounded,
+                color: accent,
+                size: 48,
+                filled: done,
               ),
-              title: Text(challenge.title,
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w800)),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(challenge.description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        color: scheme.onSurface.withValues(alpha: 0.65))),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(challenge.title,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 3),
+                    Text(challenge.description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 13.5, height: 1.35, color: scheme.muted)),
+                    const SizedBox(height: 8),
+                    done
+                        ? Pill(
+                            icon: Icons.check_rounded,
+                            label: 'Solved',
+                            color: scheme.success)
+                        : Pill(
+                            icon: Icons.play_arrow_rounded,
+                            label: 'Try it',
+                            color: scheme.violet),
+                  ],
+                ),
               ),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (BuildContext routeContext) =>
-                        _ChallengePage(challengeId: challenge.id),
-                  )),
-            ),
+              Icon(Icons.chevron_right_rounded, color: scheme.faint),
+            ],
           ),
         );
       },
@@ -309,16 +442,16 @@ class _ChallengeList extends StatelessWidget {
   }
 }
 
-class _ChallengePage extends StatefulWidget {
-  const _ChallengePage({required this.challengeId});
+class ChallengePage extends StatefulWidget {
+  const ChallengePage({super.key, required this.challengeId});
 
   final String challengeId;
 
   @override
-  State<_ChallengePage> createState() => _ChallengePageState();
+  State<ChallengePage> createState() => _ChallengePageState();
 }
 
-class _ChallengePageState extends State<_ChallengePage> {
+class _ChallengePageState extends State<ChallengePage> {
   late final Challenge challenge;
   late final CodeLineEditingController controller;
   List<Map<String, dynamic>>? results;
@@ -469,8 +602,7 @@ class _ChallengePageState extends State<_ChallengePage> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(runError!,
-                        style: TextStyle(
-                            fontSize: 12.5, color: scheme.error)),
+                        style: TextStyle(fontSize: 12.5, color: scheme.error)),
                   ),
                 ],
               ),
@@ -494,8 +626,8 @@ class _ChallengePageState extends State<_ChallengePage> {
                     subtitle: passed
                         ? null
                         : Text(result['message'] as String? ?? '',
-                            style: TextStyle(
-                                fontSize: 11.5, color: scheme.error)),
+                            style:
+                                TextStyle(fontSize: 11.5, color: scheme.error)),
                   );
                 },
               ),
@@ -505,7 +637,6 @@ class _ChallengePageState extends State<_ChallengePage> {
     );
   }
 }
-
 
 // ---------------------------------------------------------------------------
 // Cheat sheets
@@ -518,45 +649,67 @@ class _CheatSheetList extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
       children: <Widget>[
         for (final CheatSheet sheet in kCheatSheets) ...<Widget>[
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(sheet.title,
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 8),
-                  for (final List<String> row in sheet.rows)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 3),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          SizedBox(
-                            width: 150,
+          AppCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    IconBadge(
+                        icon: Icons.bolt_rounded,
+                        color: scheme.secondary,
+                        size: 36),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(sheet.title,
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w800)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                for (final List<String> row in sheet.rows)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Expanded(
+                          flex: 5,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: scheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                             child: Text(row[0],
                                 style: TextStyle(
-                                    fontFamily: 'monospace',
-                                    fontSize: 12,
+                                    fontFamily: kMonoFont,
+                                    fontSize: 12.5,
                                     color: scheme.primary)),
                           ),
-                          Expanded(
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 6,
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 4),
                             child: Text(row[1],
                                 style: TextStyle(
-                                    fontSize: 12.5,
-                                    color: scheme.onSurface
-                                        .withValues(alpha: 0.75))),
+                                    fontSize: 13.5,
+                                    height: 1.35,
+                                    color: scheme.muted)),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
           const SizedBox(height: 12),

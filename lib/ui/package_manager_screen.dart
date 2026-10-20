@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/python_bridge.dart';
+import '../theme/app_theme.dart';
+import 'widgets/app_widgets.dart';
 
 /// Package manager GUI. Shows everything bundled with the interpreter and
 /// offers one-tap installs for popular libraries (with an honest fallback
 /// when runtime pip is unavailable — see the info card).
 class PackageManagerScreen extends StatefulWidget {
-  const PackageManagerScreen({super.key});
+  const PackageManagerScreen({super.key, this.embedded = false});
+
+  /// Hosted inside the Tools tab: no AppBar of its own.
+  final bool embedded;
 
   @override
   State<PackageManagerScreen> createState() => _PackageManagerScreenState();
@@ -20,8 +25,16 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
   String? _installing;
 
   static const List<String> _popular = <String>[
-    'numpy', 'requests', 'scipy', 'pandas', 'pillow', 'matplotlib',
-    'sympy', 'beautifulsoup4', 'pyyaml', 'attrs',
+    'numpy',
+    'requests',
+    'scipy',
+    'pandas',
+    'pillow',
+    'matplotlib',
+    'sympy',
+    'beautifulsoup4',
+    'pyyaml',
+    'attrs',
   ];
 
   @override
@@ -36,7 +49,8 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
       final Map<String, dynamic> result =
           await PythonBridge.instance.listPackages();
       if (result['ok'] == true) {
-        final List<dynamic> packages = result['packages'] as List<dynamic>? ?? <dynamic>[];
+        final List<dynamic> packages =
+            result['packages'] as List<dynamic>? ?? <dynamic>[];
         setState(() {
           _packages = packages
               .map((dynamic p) => <String, dynamic>{
@@ -68,9 +82,7 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(ok ? message : 'Install failed: $message'),
-        action: ok
-            ? SnackBarAction(label: 'Refresh', onPressed: _load)
-            : null,
+        action: ok ? SnackBarAction(label: 'Refresh', onPressed: _load) : null,
       ),
     );
     if (ok) await _load();
@@ -97,7 +109,7 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
               ),
               child: SelectableText(
                 'install("$name")',
-                style: const TextStyle(fontFamily: 'monospace'),
+                style: const TextStyle(fontFamily: kMonoFont),
               ),
             ),
           ],
@@ -137,42 +149,43 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
             .toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Packages')),
+      backgroundColor: widget.embedded ? Colors.transparent : null,
+      appBar: widget.embedded ? null : AppBar(title: const Text('Packages')),
       body: Column(
         children: <Widget>[
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: TextField(
               decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: 'Search installed packages…',
-                isDense: true,
+                prefixIcon: Icon(Icons.search_rounded),
+                hintText: 'Search installed packages',
               ),
               onChanged: (String v) => setState(() => _query = v),
             ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: <Widget>[
-                    Icon(Icons.info_outline,
-                        size: 18, color: scheme.primary),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'numpy and requests are bundled into the app. '
-                        'More libraries can be added when building the APK '
-                        '(README → "Adding packages").',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: scheme.onSurface.withValues(alpha: 0.7)),
-                      ),
+            child: AppCard(
+              padding: const EdgeInsets.all(14),
+              color: scheme.tint(scheme.secondary, 0.08),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  IconBadge(
+                      icon: Icons.inventory_2_rounded,
+                      color: scheme.secondary,
+                      size: 38),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'These libraries are bundled inside the app and work '
+                      'offline. To add more, include them when building the '
+                      'APK (README: "Adding packages").',
+                      style: TextStyle(
+                          fontSize: 13, height: 1.4, color: scheme.muted),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -180,43 +193,63 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : RefreshIndicator(
-                    onRefresh: _load,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      itemCount: filtered.length,
-                      itemBuilder: (BuildContext context, int index) {
-                        final Map<String, dynamic> pkg = filtered[index];
-                        final bool isPopular =
-                            _popular.contains(pkg['name']);
-                        return ListTile(
-                          dense: true,
-                          leading: Icon(
-                            isPopular
-                                ? Icons.star_outline
-                                : Icons.extension_outlined,
-                            size: 18,
-                            color: scheme.onSurface.withValues(alpha: 0.6),
-                          ),
-                          title: Text(pkg['name'] as String,
-                              style: const TextStyle(
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w600)),
-                          subtitle: Text(pkg['version'] as String? ?? '',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: scheme.onSurface
-                                      .withValues(alpha: 0.5))),
-                        );
-                      },
-                    ),
-                  ),
+                : filtered.isEmpty
+                    ? EmptyState(
+                        icon: Icons.inventory_2_outlined,
+                        title: _query.isEmpty
+                            ? 'No packages found'
+                            : 'No match for "$_query"',
+                        message: _query.isEmpty
+                            ? 'Pull down to refresh the list.'
+                            : 'Check the spelling, or tap Install to add it.',
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _load,
+                        child: ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
+                          itemBuilder: (BuildContext context, int index) {
+                            final Map<String, dynamic> pkg = filtered[index];
+                            final bool isPopular =
+                                _popular.contains(pkg['name']);
+                            return AppCard(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 12),
+                              child: Row(
+                                children: <Widget>[
+                                  IconBadge(
+                                    icon: isPopular
+                                        ? Icons.star_rounded
+                                        : Icons.extension_rounded,
+                                    color: isPopular
+                                        ? scheme.flame
+                                        : scheme.success,
+                                    size: 40,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(pkg['name'] as String,
+                                        style: const TextStyle(
+                                            fontSize: 15.5,
+                                            fontWeight: FontWeight.w700)),
+                                  ),
+                                  Pill(
+                                      label: 'v${pkg['version'] ?? '?'}',
+                                      color: scheme.muted),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'install',
-        icon: const Icon(Icons.add),
+        icon: const Icon(Icons.add_rounded),
         label: const Text('Install'),
         onPressed: () => _showInstallSheet(),
       ),
@@ -263,9 +296,8 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
                               height: 12,
                               child: CircularProgressIndicator(strokeWidth: 2))
                           : Text(name),
-                      onPressed: _installing == null
-                          ? () => _install(name)
-                          : null,
+                      onPressed:
+                          _installing == null ? () => _install(name) : null,
                     ),
                 ],
               ),

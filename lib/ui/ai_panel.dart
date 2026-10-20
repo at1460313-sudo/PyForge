@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../theme/app_theme.dart';
 import 'package:flutter/services.dart';
 
 import '../state/ai_model.dart';
@@ -378,7 +380,7 @@ class _DiffView extends StatelessWidget {
                       ? '- ${line.text}'
                       : '  ${line.text}',
               style: TextStyle(
-                fontFamily: 'monospace',
+                fontFamily: kMonoFont,
                 fontSize: 12,
                 color: line.action == DiffAction.equal
                     ? scheme.onSurface.withValues(alpha: 0.7)

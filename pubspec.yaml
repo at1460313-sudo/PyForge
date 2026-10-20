@@ -39,3 +39,16 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  fonts:
+    # JetBrains Mono (no-ligature build, SIL OFL 1.1 — see assets/fonts/OFL.txt).
+    # No ligatures on purpose: beginners should see `!=` and `->` exactly as typed.
+    - family: JetBrainsMono
+      fonts:
+        - asset: assets/fonts/JetBrainsMonoNL-Regular.ttf
+        - asset: assets/fonts/JetBrainsMonoNL-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/JetBrainsMonoNL-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/JetBrainsMonoNL-Italic.ttf
+          style: italic

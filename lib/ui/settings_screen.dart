@@ -8,6 +8,7 @@ import '../services/secure_store.dart';
 import '../state/settings_model.dart';
 import '../state/workspace_model.dart';
 import '../theme/app_theme.dart';
+import 'widgets/app_widgets.dart';
 import '../theme/syntax_themes.dart';
 
 /// Settings: appearance, AI keys (BYOK) and version control.
@@ -115,6 +116,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
+          AppCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
           // ------------------------------------------------ APPEARANCE
           _Section(icon: Icons.palette_outlined, title: 'Appearance'),
           const SizedBox(height: 10),
@@ -145,11 +151,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             value: settings.fontSize,
             min: 11,
             max: 22,
-            display: '${settings.fontSize.round()} pt',
+            display: '${settings.fontSize.round()} sp',
             onChanged: (double v) => settings.setFontSize(v),
           ),
 
-          const SizedBox(height: 28),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          AppCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
           // ------------------------------------------------ AI CO-PILOT
           _Section(icon: Icons.auto_awesome, title: 'AI Co-Pilot (BYOK)'),
           const SizedBox(height: 4),
@@ -159,10 +173,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'action.',
             style: TextStyle(
                 fontSize: 12.5,
-                color: scheme.onSurface.withValues(alpha: 0.65)),
+                color: scheme.muted),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<AiProvider>(
+            isExpanded: true,
             decoration: const InputDecoration(
                 labelText: 'Provider', prefixIcon: Icon(Icons.cloud_outlined)),
             value: settings.aiProvider,
@@ -298,7 +313,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
 
-          const SizedBox(height: 28),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          AppCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
           // ------------------------------------------------ VERSION CONTROL
           _Section(icon: Icons.source_outlined, title: 'Version control'),
           const SizedBox(height: 4),
@@ -308,7 +331,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'encrypted storage.',
             style: TextStyle(
                 fontSize: 12.5,
-                color: scheme.onSurface.withValues(alpha: 0.65)),
+                color: scheme.muted),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -358,7 +381,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 14),
           _buildGitActions(),
 
-          const SizedBox(height: 28),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          AppCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
           // ------------------------------------------------ ABOUT
           _Section(icon: Icons.info_outline, title: 'About'),
           const SizedBox(height: 8),
@@ -368,7 +399,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'git push works without internet.',
             style: TextStyle(
                 fontSize: 12.5,
-                color: scheme.onSurface.withValues(alpha: 0.65)),
+                color: scheme.muted),
+          ),
+              ],
+            ),
           ),
           const SizedBox(height: 32),
         ],
@@ -377,18 +411,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildSyntaxChips(SettingsModel settings) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: <Widget>[
-        for (final SyntaxThemeDef theme in SyntaxThemes.all)
-          ChoiceChip(
-            label: Text(theme.label,
-                style: const TextStyle(fontSize: 12.5)),
-            selected: settings.syntaxThemeId == theme.id,
-            onSelected: (_) => settings.setSyntaxTheme(theme.id),
-          ),
-      ],
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: 124,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: SyntaxThemes.all.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (BuildContext context, int index) {
+          final SyntaxThemeDef theme = SyntaxThemes.all[index];
+          final bool selected = settings.syntaxThemeId == theme.id;
+          TextStyle token(String key, {Color? fallback}) => TextStyle(
+                fontFamily: kMonoFont,
+                fontSize: 11.5,
+                height: 1.35,
+                color: theme.map[key]?.color ?? fallback ?? theme.text,
+              );
+          return Semantics(
+            button: true,
+            selected: selected,
+            label: 'Editor theme ${theme.label}',
+            child: GestureDetector(
+              onTap: () => settings.setSyntaxTheme(theme.id),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 128,
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                decoration: BoxDecoration(
+                  color: theme.background,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: selected ? scheme.primary : scheme.outlineVariant,
+                    width: selected ? 2.2 : 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text.rich(TextSpan(children: <InlineSpan>[
+                      TextSpan(text: 'def ', style: token('keyword')),
+                      TextSpan(
+                          text: 'hi',
+                          style: token('title', fallback: theme.text)),
+                      TextSpan(text: '():', style: token('subst')),
+                    ])),
+                    Text.rich(TextSpan(children: <InlineSpan>[
+                      TextSpan(text: '  print(', style: token('subst')),
+                      TextSpan(text: '"yo"', style: token('string')),
+                      TextSpan(text: ')', style: token('subst')),
+                    ])),
+                    Text('# note', style: token('comment')),
+                    const Spacer(),
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            theme.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              color: theme.text,
+                            ),
+                          ),
+                        ),
+                        if (selected)
+                          Icon(Icons.check_circle_rounded,
+                              size: 16, color: scheme.primary),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -502,14 +601,17 @@ class _Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
-    return Row(
-      children: <Widget>[
-        Icon(icon, size: 18, color: scheme.primary),
-        const SizedBox(width: 8),
-        Text(title,
-            style:
-                const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-      ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: <Widget>[
+          IconBadge(icon: icon, color: scheme.primary, size: 36),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+          ),
+        ],
+      ),
     );
   }
 }

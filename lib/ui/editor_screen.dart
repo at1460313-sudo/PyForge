@@ -13,6 +13,7 @@ import '../state/progress_model.dart';
 import '../state/run_model.dart';
 import '../state/settings_model.dart';
 import '../state/workspace_model.dart';
+import '../theme/app_theme.dart';
 import '../theme/syntax_themes.dart';
 import '../utils/ai_parsing.dart';
 import 'ai_panel.dart';
@@ -20,6 +21,7 @@ import 'debugger_panel.dart';
 import 'file_tree_panel.dart';
 import 'keyboard_bar.dart';
 import 'output_panel.dart';
+import 'widgets/app_widgets.dart';
 
 /// The IDE: file tree + editor + terminal + debugger + AI.
 class EditorScreen extends StatefulWidget {
@@ -31,6 +33,7 @@ class EditorScreen extends StatefulWidget {
 
 class _EditorScreenState extends State<EditorScreen> {
   final FocusNode _editorFocus = FocusNode();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   Timer? _syntaxDebounce;
   Map<String, dynamic>? _syntaxError;
   String? _syntaxErrorPath; // file the banner belongs to
@@ -54,8 +57,7 @@ class _EditorScreenState extends State<EditorScreen> {
   // Actions
   // ---------------------------------------------------------------------
 
-  Future<void> _confirmCloseTab(
-      WorkspaceModel workspace, String path) async {
+  Future<void> _confirmCloseTab(WorkspaceModel workspace, String path) async {
     if (!workspace.isDirty(path)) {
       workspace.closeTab(path);
       return;
@@ -83,16 +85,14 @@ class _EditorScreenState extends State<EditorScreen> {
   Future<void> _save({bool recordLines = false}) async {
     final WorkspaceModel workspace = context.read<WorkspaceModel>();
     final String? path = workspace.activePath;
-    final OpenBuffer? buffer =
-        path == null ? null : workspace.buffers[path];
+    final OpenBuffer? buffer = path == null ? null : workspace.buffers[path];
     if (path == null || buffer == null) return;
     if (recordLines && buffer.isDirty) {
       // O(n+m) memory: never build the full diff just to count changes.
       final int changed =
           countChangedLines(buffer.savedText, buffer.controller.text);
       if (changed > 0) {
-        unawaited(
-            context.read<ProgressModel>().recordLinesWritten(changed));
+        unawaited(context.read<ProgressModel>().recordLinesWritten(changed));
       }
     }
     await workspace.saveActive();
@@ -105,6 +105,8 @@ class _EditorScreenState extends State<EditorScreen> {
     if (!workspace.hasActive) return;
     if (run.state != RunState.idle) return; // never overlap sessions
     HapticFeedback.mediumImpact();
+    // Dismiss the soft keyboard so the output is visible.
+    FocusManager.instance.primaryFocus?.unfocus();
     await _save(recordLines: true);
     // Save every other open file too: helper modules imported by this script
     // are read from disk, so unsaved edits in other tabs would be ignored.
@@ -131,12 +133,10 @@ class _EditorScreenState extends State<EditorScreen> {
     HapticFeedback.mediumImpact();
     await _save();
     await workspace.saveAll();
-    final String debugId =
-        'debug-${DateTime.now().millisecondsSinceEpoch}';
+    final String debugId = 'debug-${DateTime.now().millisecondsSinceEpoch}';
     run.beginDebugCapture(debugId);
-    final Map<String, dynamic> result = await debugger.start(
-        workspace.activePath!, workspace.activeText,
-        runId: debugId);
+    final Map<String, dynamic> result = await debugger
+        .start(workspace.activePath!, workspace.activeText, runId: debugId);
     run.endDebugCapture(result);
   }
 
@@ -240,8 +240,23 @@ class _EditorScreenState extends State<EditorScreen> {
         workspace.controllerFor(workspace.activePath);
     final bool focusMode = workspace.focusMode;
 
+    // Phones: the file tree is a slide-in drawer (a permanent 210 dp panel
+    // would leave ~150 dp for code). Tablets / landscape: side panel.
+    final bool wide = MediaQuery.of(context).size.width >= 700;
+
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: syntax.background,
+      drawer: (wide || focusMode)
+          ? null
+          : Drawer(
+              width: 316,
+              child: FileTreePanel(
+                workspace: workspace,
+                onOpened: () => _scaffoldKey.currentState?.closeDrawer(),
+              ),
+            ),
+      drawerEnableOpenDragGesture: false, // would fight horizontal code scroll
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -250,19 +265,19 @@ class _EditorScreenState extends State<EditorScreen> {
             if (!focusMode &&
                 _syntaxError != null &&
                 _syntaxErrorPath == workspace.activePath)
-              _ErrorLensBanner(
-                  error: _syntaxError!, onFix: _fixSyntaxError),
+              _ErrorLensBanner(error: _syntaxError!, onFix: _fixSyntaxError),
             Expanded(
               child: Row(
                 children: <Widget>[
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    curve: Curves.easeOutCubic,
-                    width: workspace.treeExpanded ? 210 : 0,
-                    child: workspace.treeExpanded
-                        ? FileTreePanel(workspace: workspace)
-                        : null,
-                  ),
+                  if (wide)
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeOutCubic,
+                      width: workspace.treeExpanded ? 260 : 0,
+                      child: workspace.treeExpanded
+                          ? FileTreePanel(workspace: workspace)
+                          : null,
+                    ),
                   Expanded(
                     child: Stack(
                       children: <Widget>[
@@ -289,6 +304,8 @@ class _EditorScreenState extends State<EditorScreen> {
                                   _onCodeChanged(workspace),
                               style: CodeEditorStyle(
                                 fontSize: settings.fontSize,
+                                fontFamily: kMonoFont,
+                                fontHeight: 1.5,
                                 backgroundColor: syntax.background,
                                 textColor: syntax.text,
                                 codeTheme: CodeHighlightTheme(
@@ -311,7 +328,7 @@ class _EditorScreenState extends State<EditorScreen> {
                             ),
                           )
                         else
-                          _buildEmptyState(context, scheme),
+                          _buildEmptyState(context, scheme, workspace),
                         // Focus-mode exit.
                         if (focusMode)
                           Positioned(
@@ -334,8 +351,8 @@ class _EditorScreenState extends State<EditorScreen> {
                         // Run button.
                         if (!focusMode)
                           Positioned(
-                            right: 18,
-                            bottom: 18,
+                            right: 16,
+                            bottom: 16,
                             child: _RunButton(
                               running: run.state == RunState.running,
                               onRun: _run,
@@ -364,7 +381,9 @@ class _EditorScreenState extends State<EditorScreen> {
                   : const SizedBox(width: double.infinity),
             ),
             // Terminal / output.
-            if (!focusMode)
+            if (!focusMode &&
+                (MediaQuery.of(context).viewInsets.bottom == 0 ||
+                    run.state != RunState.idle))
               OutputPanel(
                 run: run,
                 onExplainError: _explainError,
@@ -376,28 +395,33 @@ class _EditorScreenState extends State<EditorScreen> {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, ColorScheme scheme) {
+  Widget _buildEmptyState(
+      BuildContext context, ColorScheme scheme, WorkspaceModel workspace) {
     final SyntaxThemeDef syntax =
         SyntaxThemes.byId(context.watch<SettingsModel>().syntaxThemeId);
     return Container(
       color: syntax.background,
       width: double.infinity,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          Icon(Icons.code_rounded,
-              size: 56, color: syntax.text.withValues(alpha: 0.3)),
-          const SizedBox(height: 12),
-          Text(
-            'Open a file or create a new one',
-            style: TextStyle(
-                color: syntax.text.withValues(alpha: 0.6), fontSize: 14),
-          ),
-          const SizedBox(height: 16),
+      child: EmptyState(
+        icon: Icons.code_rounded,
+        title: 'No file open',
+        message: 'Create a new Python file, or open one from your workspace.',
+        actions: <Widget>[
           FilledButton.icon(
-            icon: const Icon(Icons.add),
+            icon: const Icon(Icons.note_add_rounded),
             label: const Text('New file'),
-            onPressed: () => context.read<WorkspaceModel>().toggleTree(),
+            onPressed: () => createNodeFlow(context, workspace),
+          ),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.folder_open_rounded),
+            label: const Text('Open files'),
+            onPressed: () {
+              if (MediaQuery.of(context).size.width >= 700) {
+                workspace.toggleTree();
+              } else {
+                _scaffoldKey.currentState?.openDrawer();
+              }
+            },
           ),
         ],
       ),
@@ -408,108 +432,201 @@ class _EditorScreenState extends State<EditorScreen> {
       BuildContext context, WorkspaceModel workspace, DebuggerModel debugger) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
     final SettingsModel settings = context.watch<SettingsModel>();
+    final bool wide = MediaQuery.of(context).size.width >= 700;
+    final String? active = workspace.activePath;
+    final String title =
+        active == null ? 'Code' : active.split('/').last.split(r'\\').last;
+    final bool dirty = active != null && workspace.isDirty(active);
+    final bool hasBreakpoints =
+        (debugger.breakpoints[active] ?? const <int>{}).isNotEmpty;
+
     return Material(
       color: scheme.surface,
-      child: Column(
-        children: <Widget>[
-          SizedBox(
-            height: 52,
-            child: Row(
-              children: <Widget>[
-                IconButton(
-                  tooltip: 'Toggle file tree',
-                  icon: Icon(
-                    workspace.treeExpanded
-                        ? Icons.menu_open
-                        : Icons.menu,
-                    size: 20,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+        ),
+        child: Column(
+          children: <Widget>[
+            SizedBox(
+              height: 56,
+              child: Row(
+                children: <Widget>[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: 'Files',
+                    icon: Icon(wide && workspace.treeExpanded
+                        ? Icons.menu_open_rounded
+                        : Icons.folder_open_rounded),
+                    onPressed: () {
+                      HapticFeedback.selectionClick();
+                      if (wide) {
+                        workspace.toggleTree();
+                      } else {
+                        _scaffoldKey.currentState?.openDrawer();
+                      }
+                    },
                   ),
-                  onPressed: () {
-                    HapticFeedback.selectionClick();
-                    workspace.toggleTree();
-                  },
-                ),
-                Expanded(
-                  child: workspace.openTabs.isEmpty
-                      ? Text('PyForge',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: scheme.onSurface.withValues(alpha: 0.7)))
-                      : ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: workspace.openTabs.length,
-                          itemBuilder: (BuildContext tabContext, int index) {
-                            final String path = workspace.openTabs[index];
-                            final bool isActive = path == workspace.activePath;
-                            final String name =
-                                path.split('/').last.split(r'\').last;
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 6),
-                              child: InputChip(
-                                label: Text(
-                                  workspace.isDirty(path)
-                                      ? '$name •'
-                                      : name,
-                                  style: TextStyle(
-                                      fontSize: 12.5,
-                                      fontWeight: isActive
-                                          ? FontWeight.w800
-                                          : FontWeight.w500),
-                                ),
-                                selected: isActive,
-                                onSelected: (_) => workspace.openFile(path),
-                                onDeleted: () => _confirmCloseTab(workspace, path),
-                                deleteIconColor:
-                                    scheme.onSurface.withValues(alpha: 0.5),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            );
-                          },
+                  Expanded(
+                    child: Row(
+                      children: <Widget>[
+                        Flexible(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 17, fontWeight: FontWeight.w800),
+                          ),
                         ),
-                ),
-                const SizedBox(width: 4),
-                IconButton(
-                  tooltip: 'Toggle breakpoint at cursor',
-                  icon: Badge(
-                    isLabelVisible:
-                        (debugger.breakpoints[workspace.activePath] ?? const <int>{})
-                            .isNotEmpty,
-                    child: const Icon(Icons.bookmark_add_outlined, size: 20),
+                        if (dirty) ...<Widget>[
+                          const SizedBox(width: 8),
+                          Pill(label: 'unsaved', color: scheme.flame),
+                        ],
+                      ],
+                    ),
                   ),
-                  onPressed: _toggleBreakpoint,
-                ),
-                IconButton(
-                  tooltip: 'Save',
-                  icon: const Icon(Icons.save_outlined, size: 20),
-                  onPressed: () => _save(recordLines: true),
-                ),
-                IconButton(
-                  tooltip: 'AI Co-Pilot',
-                  icon: Icon(Icons.auto_awesome,
-                      size: 20,
-                      color: settings.hasApiKey
-                          ? scheme.primary
-                          : scheme.onSurface.withValues(alpha: 0.5)),
-                  onPressed: _openAiPanel,
-                ),
-                IconButton(
-                  tooltip: 'Focus mode',
-                  icon: const Icon(Icons.fullscreen_outlined, size: 20),
-                  onPressed: () {
-                    HapticFeedback.selectionClick();
-                    workspace.setFocusMode(true);
+                  if (dirty)
+                    IconButton(
+                      tooltip: 'Save',
+                      icon: Icon(Icons.save_rounded, color: scheme.primary),
+                      onPressed: () => _save(recordLines: true),
+                    ),
+                  IconButton(
+                    tooltip: 'AI Co-Pilot',
+                    icon: Icon(Icons.auto_awesome_rounded,
+                        color:
+                            settings.hasApiKey ? scheme.primary : scheme.muted),
+                    onPressed: _openAiPanel,
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'More',
+                    icon: Badge(
+                      isLabelVisible: hasBreakpoints,
+                      smallSize: 8,
+                      child: const Icon(Icons.more_vert_rounded),
+                    ),
+                    onSelected: (String v) {
+                      switch (v) {
+                        case 'save':
+                          _save(recordLines: true);
+                        case 'breakpoint':
+                          _toggleBreakpoint();
+                        case 'debug':
+                          _debug();
+                        case 'focus':
+                          HapticFeedback.selectionClick();
+                          workspace.setFocusMode(true);
+                        case 'close':
+                          if (active != null) {
+                            _confirmCloseTab(workspace, active);
+                          }
+                      }
+                    },
+                    itemBuilder: (BuildContext context) =>
+                        <PopupMenuEntry<String>>[
+                      _menuItem('save', Icons.save_outlined, 'Save'),
+                      _menuItem('breakpoint', Icons.bookmark_add_outlined,
+                          'Toggle breakpoint at cursor'),
+                      _menuItem('debug', Icons.bug_report_outlined,
+                          'Debug (step through)'),
+                      _menuItem(
+                          'focus', Icons.fullscreen_rounded, 'Focus mode'),
+                      const PopupMenuDivider(),
+                      _menuItem(
+                          'close', Icons.close_rounded, 'Close this file'),
+                    ],
+                  ),
+                  const SizedBox(width: 4),
+                ],
+              ),
+            ),
+            if (workspace.openTabs.length > 1)
+              SizedBox(
+                height: 48,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+                  itemCount: workspace.openTabs.length,
+                  itemBuilder: (BuildContext tabContext, int index) {
+                    final String path = workspace.openTabs[index];
+                    final bool isActive = path == active;
+                    final String name = path.split('/').last.split(r'\\').last;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Material(
+                        color: isActive
+                            ? scheme.primary.withValues(alpha: 0.16)
+                            : scheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => workspace.openFile(path),
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 12),
+                            child: Row(
+                              children: <Widget>[
+                                Text(
+                                  name,
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: isActive
+                                        ? FontWeight.w800
+                                        : FontWeight.w600,
+                                    color: isActive
+                                        ? scheme.primary
+                                        : scheme.muted,
+                                  ),
+                                ),
+                                if (workspace.isDirty(path))
+                                  Container(
+                                    width: 7,
+                                    height: 7,
+                                    margin: const EdgeInsets.only(left: 6),
+                                    decoration: BoxDecoration(
+                                        color: scheme.flame,
+                                        shape: BoxShape.circle),
+                                  ),
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(12),
+                                  onTap: () =>
+                                      _confirmCloseTab(workspace, path),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(10),
+                                    child: Icon(Icons.close_rounded,
+                                        size: 16, color: scheme.muted),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
                   },
                 ),
-              ],
-            ),
-          ),
-        ],
+              ),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Floating run / debug button.
+PopupMenuItem<String> _menuItem(String value, IconData icon, String label) {
+  return PopupMenuItem<String>(
+    value: value,
+    child: Row(
+      children: <Widget>[
+        Icon(icon, size: 20),
+        const SizedBox(width: 12),
+        Flexible(child: Text(label)),
+      ],
+    ),
+  );
+}
+
+/// Floating run / debug buttons. "Run" carries a label so it is obvious.
 class _RunButton extends StatelessWidget {
   const _RunButton({
     required this.running,
@@ -526,24 +643,33 @@ class _RunButton extends StatelessWidget {
     final ColorScheme scheme = Theme.of(context).colorScheme;
     return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: <Widget>[
         FloatingActionButton.small(
           heroTag: 'debug',
           tooltip: 'Debug',
           backgroundColor: scheme.surfaceContainerHighest,
-          foregroundColor: scheme.primary,
+          foregroundColor: scheme.secondary,
+          elevation: 2,
           onPressed: running ? null : onDebug,
-          child: const Icon(Icons.bug_report_outlined, size: 18),
+          child: const Icon(Icons.bug_report_outlined, size: 22),
         ),
-        const SizedBox(height: 10),
-        FloatingActionButton(
+        const SizedBox(height: 12),
+        FloatingActionButton.extended(
           heroTag: 'run',
           tooltip: 'Run',
           backgroundColor: scheme.primary,
           foregroundColor: scheme.onPrimary,
           onPressed: running ? null : onRun,
-          child: Icon(running ? Icons.hourglass_empty : Icons.play_arrow,
-              size: 30),
+          icon: running
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.5, color: scheme.onPrimary),
+                )
+              : const Icon(Icons.play_arrow_rounded, size: 28),
+          label: Text(running ? 'Running' : 'Run'),
         ),
       ],
     );
@@ -564,31 +690,30 @@ class _ErrorLensBanner extends StatelessWidget {
     final int line = (error['line'] as num?)?.toInt() ?? 1;
     final String message = error['message'] as String? ?? 'Syntax error';
     return Material(
-      color: scheme.error.withValues(alpha: 0.12),
+      color: scheme.error.withValues(alpha: 0.14),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.fromLTRB(14, 4, 6, 4),
         child: Row(
           children: <Widget>[
-            Icon(Icons.error_outline, size: 16, color: scheme.error),
-            const SizedBox(width: 8),
+            Icon(Icons.error_outline_rounded, size: 20, color: scheme.error),
+            const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Ln $line: $message',
+                'Line $line: $message',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: scheme.error,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
             TextButton.icon(
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                foregroundColor: scheme.error,
-              ),
+              style: TextButton.styleFrom(foregroundColor: scheme.error),
               onPressed: onFix,
-              icon: const Icon(Icons.auto_fix_high, size: 14),
-              label: const Text('Fix it', style: TextStyle(fontSize: 12)),
+              icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
+              label: const Text('Fix it'),
             ),
           ],
         ),
