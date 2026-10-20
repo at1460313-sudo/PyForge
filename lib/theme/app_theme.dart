@@ -87,7 +87,7 @@ class AppThemes {
         backgroundColor: scaffold,
         indicatorColor: scheme.primary.withValues(alpha: 0.14),
         height: 68,
-        labelBehavior: NavigationDestinationLabelBehavior.onlySelected,
+        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
       ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: scaffold,

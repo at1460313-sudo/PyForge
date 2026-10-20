@@ -87,7 +87,7 @@ class _OutputPanelState extends State<OutputPanel> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     const Spacer(),
-                    if (run.state == RunState.running)
+                    if (run.state != RunState.idle)
                       _HeaderAction(
                         icon: Icons.stop,
                         label: 'Stop',

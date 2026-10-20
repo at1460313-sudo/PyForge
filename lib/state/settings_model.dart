@@ -23,18 +23,31 @@ class SettingsModel extends ChangeNotifier {
   String gitRemoteUrl = '';
   String gitUsername = '';
 
+  /// Stored enum indexes can go stale when values are added/reordered in an
+  /// app update; an out-of-range index must not crash startup.
+  static T _enumAt<T>(List<T> values, int? index, T fallback) =>
+      (index != null && index >= 0 && index < values.length)
+          ? values[index]
+          : fallback;
+
   Future<void> load() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    themeMode = AppThemeMode
-        .values[prefs.getInt('themeMode') ?? AppThemeMode.dark.index];
+    themeMode = _enumAt(AppThemeMode.values, prefs.getInt('themeMode'),
+        AppThemeMode.dark);
     syntaxThemeId =
         prefs.getString('syntaxTheme') ?? SyntaxThemes.defaultId;
     fontSize = prefs.getDouble('fontSize') ?? 15;
-    aiProvider = AiProvider
-        .values[prefs.getInt('aiProvider') ?? AiProvider.openai.index];
+    aiProvider = _enumAt(
+        AiProvider.values, prefs.getInt('aiProvider'), AiProvider.openai);
     aiModel = prefs.getString('aiModel') ?? 'gpt-4o-mini';
     aiBaseUrl = prefs.getString('aiBaseUrl') ?? '';
-    hasApiKey = await SecureStore.instance.apiKey != null;
+    try {
+      hasApiKey = await SecureStore.instance.apiKey != null;
+    } catch (_) {
+      // Keystore data can be unreadable after a backup restore / new device.
+      // Treat it as "no key saved" instead of crashing at startup.
+      hasApiKey = false;
+    }
     gitAuthorName = prefs.getString('gitAuthorName') ?? gitAuthorName;
     gitAuthorEmail = prefs.getString('gitAuthorEmail') ?? gitAuthorEmail;
     gitRemoteUrl = prefs.getString('gitRemoteUrl') ?? '';

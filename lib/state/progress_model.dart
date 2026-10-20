@@ -49,11 +49,17 @@ class ProgressModel extends ChangeNotifier {
     if (lastActiveDate == null) {
       streakDays = 1;
     } else {
-      final int dayDelta = today.difference(DateTime(
-        lastActiveDate!.year,
-        lastActiveDate!.month,
-        lastActiveDate!.day,
-      )).inDays;
+      // Compare calendar days in UTC. Local-midnight differences are 23 or
+      // 25 hours long around daylight-saving changes, and inDays truncates
+      // 23 hours to 0 — which silently dropped the streak day after the
+      // clocks go forward.
+      final int dayDelta = DateTime.utc(today.year, today.month, today.day)
+          .difference(DateTime.utc(
+            lastActiveDate!.year,
+            lastActiveDate!.month,
+            lastActiveDate!.day,
+          ))
+          .inDays;
       if (dayDelta == 0) {
         return; // already counted today
       } else if (dayDelta == 1) {

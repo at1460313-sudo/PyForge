@@ -57,7 +57,7 @@ class _AiPanelState extends State<_AiPanel> {
       constraints: const BoxConstraints(maxHeight: 560),
       decoration: BoxDecoration(
         color: scheme.surface,
-        borderRadius: const BorderRadius.vertical(Radius.circular(24)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,

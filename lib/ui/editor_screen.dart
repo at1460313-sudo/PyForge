@@ -33,6 +33,7 @@ class _EditorScreenState extends State<EditorScreen> {
   final FocusNode _editorFocus = FocusNode();
   Timer? _syntaxDebounce;
   Map<String, dynamic>? _syntaxError;
+  String? _syntaxErrorPath; // file the banner belongs to
 
   @override
   void initState() {
@@ -105,6 +106,9 @@ class _EditorScreenState extends State<EditorScreen> {
     if (run.state != RunState.idle) return; // never overlap sessions
     HapticFeedback.mediumImpact();
     await _save(recordLines: true);
+    // Save every other open file too: helper modules imported by this script
+    // are read from disk, so unsaved edits in other tabs would be ignored.
+    await workspace.saveAll();
     unawaited(_recordProgress());
     await run.run(workspace.activePath!, workspace.activeText);
     if (run.hasError && mounted) {
@@ -123,14 +127,17 @@ class _EditorScreenState extends State<EditorScreen> {
     final RunModel run = context.read<RunModel>();
     final DebuggerModel debugger = context.read<DebuggerModel>();
     if (!workspace.hasActive) return;
+    if (run.state != RunState.idle || debugger.active) return; // no overlap
     HapticFeedback.mediumImpact();
     await _save();
+    await workspace.saveAll();
     final String debugId =
         'debug-${DateTime.now().millisecondsSinceEpoch}';
     run.beginDebugCapture(debugId);
-    await debugger.start(workspace.activePath!, workspace.activeText,
+    final Map<String, dynamic> result = await debugger.start(
+        workspace.activePath!, workspace.activeText,
         runId: debugId);
-    run.endDebugCapture();
+    run.endDebugCapture(result);
   }
 
   void _toggleBreakpoint() {
@@ -172,19 +179,46 @@ class _EditorScreenState extends State<EditorScreen> {
     _openAiPanel();
   }
 
+  /// "Fix it" on the red Error Lens banner: send the syntax error itself,
+  /// not whatever runtime error (if any) the last run happened to produce.
+  void _fixSyntaxError() {
+    final AiModel ai = context.read<AiModel>();
+    final SettingsModel settings = context.read<SettingsModel>();
+    final WorkspaceModel workspace = context.read<WorkspaceModel>();
+    final Map<String, dynamic>? e = _syntaxError;
+    ai.fixCode(
+      workspace.activeText,
+      e == null
+          ? null
+          : <String, dynamic>{
+              'type': 'SyntaxError',
+              'message': e['message'],
+              'line': e['line'],
+              'traceback': '${e['text'] ?? ''}',
+            },
+      settings,
+      path: workspace.activePath,
+    );
+    _openAiPanel();
+  }
+
   void _onCodeChanged(WorkspaceModel workspace) {
     setState(() {}); // tabs / dirty dots
     _syntaxDebounce?.cancel();
     _syntaxDebounce = Timer(const Duration(milliseconds: 600), () {
+      final String? path = workspace.activePath;
       final String source = workspace.activeText;
-      PythonBridge.instance
-          .checkSyntax(source)
-          .then((Map<String, dynamic> result) {
-        if (!mounted) return;
-        setState(() {
-          _syntaxError = result['ok'] == true ? null : result;
-        });
-      });
+      PythonBridge.instance.checkSyntax(source).then(
+        (Map<String, dynamic> result) {
+          // Ignore answers for a file the user has already switched away from.
+          if (!mounted || workspace.activePath != path) return;
+          setState(() {
+            _syntaxError = result['ok'] == true ? null : result;
+            _syntaxErrorPath = path;
+          });
+        },
+        onError: (Object _) {}, // Error Lens is best-effort; never crash on it
+      );
     });
   }
 
@@ -211,8 +245,11 @@ class _EditorScreenState extends State<EditorScreen> {
         child: Column(
           children: <Widget>[
             if (!focusMode) _buildToolbar(context, workspace, debugger),
-            if (!focusMode && _syntaxError != null)
-              _ErrorLensBanner(error: _syntaxError!, onFix: _fixError),
+            if (!focusMode &&
+                _syntaxError != null &&
+                _syntaxErrorPath == workspace.activePath)
+              _ErrorLensBanner(
+                  error: _syntaxError!, onFix: _fixSyntaxError),
             Expanded(
               child: Row(
                 children: <Widget>[

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and lower. The encrypted secure-storage file is useless on a
+     new device (its Keystore key is not restored) and makes
+     flutter_secure_storage throw BadPaddingException, so never back it up. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="FlutterSecureStorage.xml" />
+</full-backup-content>

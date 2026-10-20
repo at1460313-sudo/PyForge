@@ -115,7 +115,6 @@ class _LessonPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ProgressModel progress = context.watch<ProgressModel>();
-    final ColorScheme scheme = Theme.of(context).colorScheme;
     final bool done = progress.readLessons.contains(lesson.id);
     return Scaffold(
       appBar: AppBar(title: Text(lesson.title)),
@@ -349,20 +348,30 @@ class _ChallengePageState extends State<_ChallengePage> {
     setState(() {
       checking = true;
       runError = null;
+      results = null; // never judge this run by the previous run's results
     });
-    final Map<String, dynamic> result =
-        await PythonBridge.instance.challengeCheck(
-      challengeId: challenge.id,
-      source: controller.text,
-      testCode: challenge.testCode,
-    );
+    Map<String, dynamic> result;
+    try {
+      result = await PythonBridge.instance.challengeCheck(
+        challengeId: challenge.id,
+        source: controller.text,
+        testCode: challenge.testCode,
+      );
+    } catch (e) {
+      result = <String, dynamic>{
+        'ok': false,
+        'error': <String, dynamic>{'type': 'BridgeError', 'message': '$e'},
+      };
+    }
     if (!mounted) return;
+    List<Map<String, dynamic>>? fresh;
     setState(() {
       checking = false;
       if (result['ok'] == true) {
-        results = (result['results'] as List<dynamic>? ?? <dynamic>[])
+        fresh = (result['results'] as List<dynamic>? ?? <dynamic>[])
             .map((dynamic r) => r as Map<String, dynamic>)
             .toList();
+        results = fresh;
       } else {
         runError = result['error'] is Map
             ? '${(result['error'] as Map<String, dynamic>)['type']}: '
@@ -370,8 +379,10 @@ class _ChallengePageState extends State<_ChallengePage> {
             : 'Something went wrong.';
       }
     });
-    final bool allPassed =
-        results != null && results!.isNotEmpty && results!.every((r) => r['passed'] == true);
+    final List<Map<String, dynamic>>? checked = fresh;
+    final bool allPassed = checked != null &&
+        checked.isNotEmpty &&
+        checked.every((r) => r['passed'] == true);
     if (allPassed) {
       await progress.completeChallenge(challenge.id);
       await progress.recordActivity();

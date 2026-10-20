@@ -43,3 +43,6 @@ android/local.properties
 /android/key.properties
 *.keystore
 *.jks
+
+# Flutter generated
+/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java

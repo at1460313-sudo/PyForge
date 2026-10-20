@@ -64,21 +64,21 @@ class RunModel extends ChangeNotifier {
     for (int i = 0; i < parts.length; i++) {
       final String part = parts[i];
       final bool isLast = i == parts.length - 1;
-      if (i == 0) {
-        if (lines.isNotEmpty &&
-            lines.last.open &&
-            lines.last.stream == stream) {
-          lines.last.text += part;
-          if (!isLast) lines.last.open = false;
-        } else if (part.isNotEmpty) {
-          lines.add(RunLine(stream: stream, text: part));
-        }
-      } else {
-        if (lines.isNotEmpty && lines.last.open) lines.last.open = false;
-        if (part.isNotEmpty) {
-          lines.add(RunLine(
-              stream: stream, text: part, open: isLast));
-        }
+      if (i == 0 &&
+          lines.isNotEmpty &&
+          lines.last.open &&
+          lines.last.stream == stream) {
+        lines.last.text += part;
+        if (!isLast) lines.last.open = false;
+        continue;
+      }
+      if (i > 0 && lines.isNotEmpty && lines.last.open) {
+        lines.last.open = false;
+      }
+      // An empty part is only skipped when it is the (empty) tail after a
+      // trailing "\n"; otherwise it is a real blank line from print().
+      if (part.isNotEmpty || !isLast) {
+        lines.add(RunLine(stream: stream, text: part, open: isLast));
       }
     }
   }
@@ -101,28 +101,47 @@ class RunModel extends ChangeNotifier {
     runId = 'run-${DateTime.now().millisecondsSinceEpoch}';
     state = RunState.running;
     notifyListeners();
-    final Map<String, dynamic> result = await PythonBridge.instance.runCode(
-      runId: runId!,
-      filePath: filePath,
-      source: source,
-    );
-    if (result['cancelled'] == true) {
+    Map<String, dynamic> result;
+    try {
+      result = await PythonBridge.instance.runCode(
+        runId: runId!,
+        filePath: filePath,
+        source: source,
+      );
+    } catch (e) {
+      // Never leave the UI stuck in "running" if the bridge itself fails.
+      result = <String, dynamic>{
+        'ok': false,
+        'error': <String, dynamic>{
+          'type': 'BridgeError',
+          'message': '$e',
+          'line': null,
+          'traceback': '$e',
+        },
+      };
+    }
+    _showResult(result);
+    state = RunState.idle;
+    inputPrompt = null;
+    notifyListeners();
+    onDone?.call(result);
+  }
+
+  /// Appends the "[stopped]" / traceback lines for a finished run or debug.
+  void _showResult(Map<String, dynamic> result) {
+    if (result['cancelled'] == true || result['stoppedByUser'] == true) {
       lastRunCancelled = true;
       lines.add(RunLine(
           stream: 'stderr', text: '\n[stopped by user]\n', open: false));
     }
     if (result['ok'] == false && result['error'] is Map) {
-      lastError = result['error'] as Map<String, dynamic>;
+      lastError = Map<String, dynamic>.from(result['error'] as Map);
       lines.add(RunLine(
         stream: 'stderr',
         text: '\n${(lastError!['traceback'] as String? ?? '').trim()}',
         open: false,
       ));
     }
-    state = RunState.idle;
-    inputPrompt = null;
-    notifyListeners();
-    onDone?.call(result);
   }
 
   /// Capture output for a debug session (output events for [debugId]).
@@ -133,7 +152,8 @@ class RunModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void endDebugCapture() {
+  void endDebugCapture([Map<String, dynamic>? result]) {
+    if (result != null) _showResult(result);
     state = RunState.idle;
     inputPrompt = null;
     notifyListeners();
@@ -202,22 +222,41 @@ class DebuggerModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> start(String filePath, String source, {String? runId}) async {
+  /// Runs under the debugger and returns the Python result so the caller
+  /// can show a traceback if the program crashed.
+  Future<Map<String, dynamic>> start(String filePath, String source,
+      {String? runId}) async {
+    final String id =
+        runId ?? 'debug-${DateTime.now().millisecondsSinceEpoch}';
     this.filePath = filePath;
-    this.runId = runId ?? 'debug-${DateTime.now().millisecondsSinceEpoch}';
+    this.runId = id;
     active = true;
     paused = false;
     variables = <String, String>{};
     notifyListeners();
-    await PythonBridge.instance.debugRun(
-      runId: runId!,
-      filePath: filePath,
-      source: source,
-      breakpoints: breakpointsFor(filePath),
-    );
+    Map<String, dynamic> result;
+    try {
+      result = await PythonBridge.instance.debugRun(
+        runId: id,
+        filePath: filePath,
+        source: source,
+        breakpoints: breakpointsFor(filePath),
+      );
+    } catch (e) {
+      result = <String, dynamic>{
+        'ok': false,
+        'error': <String, dynamic>{
+          'type': 'BridgeError',
+          'message': '$e',
+          'line': null,
+          'traceback': '$e',
+        },
+      };
+    }
     active = false;
     paused = false;
     notifyListeners();
+    return result;
   }
 
   Future<void> step() async {

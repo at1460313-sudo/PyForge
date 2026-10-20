@@ -231,7 +231,7 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
       builder: (BuildContext sheetContext) => Container(
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: const BorderRadius.vertical(Radius.circular(24)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         padding: const EdgeInsets.all(16),
         child: SafeArea(

@@ -97,7 +97,7 @@ final Mode pyforgePythonMode = Mode(
       scope: const <int, String>{1: 'keyword', 2: 'title.class'},
     ),
     // Decorators.
-    Mode(className: 'meta', begin: r'^\s*@', end: '(?=#)|$'),
+    Mode(className: 'meta', begin: r'^\s*@', end: r'(?=#)|$'),
     // Rainbow brackets by type.
     Mode(match: [r'[()]'], scope: const <int, String>{0: 'symbol'}),
     Mode(match: [r'[\[\]]'], scope: const <int, String>{0: 'attr'}),

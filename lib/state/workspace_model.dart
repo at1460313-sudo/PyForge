@@ -55,6 +55,9 @@ class WorkspaceModel extends ChangeNotifier {
   String textOf(String? path) =>
       path == null ? '' : (buffers[path]?.controller.text ?? '');
 
+  /// Text of the active buffer ('' when nothing is open).
+  String get activeText => textOf(activePath);
+
   bool isDirty(String path) => buffers[path]?.isDirty ?? false;
 
   int get dirtyCount =>
@@ -193,7 +196,8 @@ print(age, height, nickname, is_coder)
   }
 
   Future<void> saveAll() async {
-    for (final MapEntry<String, OpenBuffer> entry in buffers.entries) {
+    // Copy: a tab may be closed while we await file I/O.
+    for (final MapEntry<String, OpenBuffer> entry in buffers.entries.toList()) {
       await File(entry.key).writeAsString(entry.value.controller.text);
       entry.value.savedText = entry.value.controller.text;
     }

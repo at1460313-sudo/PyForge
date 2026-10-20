@@ -98,6 +98,17 @@ class AiService {
     }
   }
 
+  /// Every provider call goes through here so a stalled connection fails with
+  /// a clear error instead of leaving the AI panel "busy" forever.
+  Future<http.Response> _post(
+    Uri uri, {
+    required Map<String, String> headers,
+    required Object body,
+  }) =>
+      _client
+          .post(uri, headers: headers, body: body)
+          .timeout(const Duration(seconds: 60));
+
   /// Validates the key with a tiny request against the chosen model.
   Future<String> testConnection(AiConfig config, String apiKey) async {
     final String reply = await complete(
@@ -123,7 +134,7 @@ class AiService {
     double temperature,
   ) async {
     final Uri uri = Uri.parse('${config.effectiveBaseUrl}/chat/completions');
-    final http.Response response = await _client.post(
+    final http.Response response = await _post(
       uri,
       headers: <String, String>{
         'Authorization': 'Bearer $apiKey',
@@ -164,7 +175,7 @@ class AiService {
     double temperature,
   ) async {
     final Uri uri = Uri.parse('${config.effectiveBaseUrl}/v1/messages');
-    final http.Response response = await _client.post(
+    final http.Response response = await _post(
       uri,
       headers: <String, String>{
         'x-api-key': apiKey,
@@ -208,7 +219,7 @@ class AiService {
     final Uri uri = Uri.parse(
       '${config.effectiveBaseUrl}/models/${config.model}:generateContent',
     );
-    final http.Response response = await _client.post(
+    final http.Response response = await _post(
       uri,
       headers: <String, String>{
         'x-goog-api-key': apiKey,

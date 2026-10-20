@@ -23,7 +23,7 @@ class PythonBridge {
   /// output | input_request | debug_pause.
   Stream<Map<String, dynamic>> get events => _eventController.stream;
 
-  void init() {
+  Future<void> init() async {
     _events.setMethodCallHandler((MethodCall call) async {
       if (call.method == 'onEvent') {
         final Map<String, dynamic> payload =
@@ -36,6 +36,25 @@ class PythonBridge {
     unawaited(ping());
   }
 
+  /// Decodes a bridge reply. The Kotlin layer reports its own failures
+  /// (e.g. Python failed to start) as {"ok": false, "error": "<text>"},
+  /// whereas Python reports {"ok": false, "error": {type, message, ...}}.
+  /// Normalise both to the map shape so errors are never silently dropped.
+  static Map<String, dynamic> _decode(String raw) {
+    final Map<String, dynamic> map = jsonDecode(raw) as Map<String, dynamic>;
+    final Object? error = map['error'];
+    if (map['ok'] == false && error is String) {
+      map['error'] = <String, dynamic>{
+        'type': 'BridgeError',
+        'message': error,
+        'line': null,
+        'traceback': error,
+      };
+      map['message'] ??= error;
+    }
+    return map;
+  }
+
   Future<bool> ping() async =>
       await _bridge.invokeMethod('ping') == 'pong';
 
@@ -45,7 +64,7 @@ class PythonBridge {
     final String raw = await _bridge.invokeMethod('checkSyntax', {
       'source': source,
     });
-    return jsonDecode(raw) as Map<String, dynamic>;
+    return _decode(raw);
   }
 
   // ---- Run --------------------------------------------------------------
@@ -60,7 +79,7 @@ class PythonBridge {
       'filePath': filePath,
       'source': source,
     });
-    return jsonDecode(raw) as Map<String, dynamic>;
+    return _decode(raw);
   }
 
   Future<void> stopRun() => _bridge.invokeMethod('stopRun');
@@ -82,7 +101,7 @@ class PythonBridge {
       'source': source,
       'breakpoints': breakpoints,
     });
-    return jsonDecode(raw) as Map<String, dynamic>;
+    return _decode(raw);
   }
 
   Future<void> debugStep() => _bridge.invokeMethod('debugStep');
@@ -94,14 +113,14 @@ class PythonBridge {
 
   Future<Map<String, dynamic>> listPackages() async {
     final String raw = await _bridge.invokeMethod('listPackages');
-    return jsonDecode(raw) as Map<String, dynamic>;
+    return _decode(raw);
   }
 
   Future<Map<String, dynamic>> tryInstallPackage(String name) async {
     final String raw = await _bridge.invokeMethod('tryInstallPackage', {
       'name': name,
     });
-    return jsonDecode(raw) as Map<String, dynamic>;
+    return _decode(raw);
   }
 
   // ---- Curriculum -------------------------------------------------------
@@ -116,7 +135,7 @@ class PythonBridge {
       'source': source,
       'testCode': testCode,
     });
-    return jsonDecode(raw) as Map<String, dynamic>;
+    return _decode(raw);
   }
 
   // ---- Git --------------------------------------------------------------
@@ -124,13 +143,13 @@ class PythonBridge {
   Future<Map<String, dynamic>> gitInit(String repoPath) async {
     final String raw =
         await _bridge.invokeMethod('gitInit', {'repoPath': repoPath});
-    return jsonDecode(raw) as Map<String, dynamic>;
+    return _decode(raw);
   }
 
   Future<Map<String, dynamic>> gitStatus(String repoPath) async {
     final String raw =
         await _bridge.invokeMethod('gitStatus', {'repoPath': repoPath});
-    return jsonDecode(raw) as Map<String, dynamic>;
+    return _decode(raw);
   }
 
   Future<Map<String, dynamic>> gitCommit({
@@ -145,7 +164,7 @@ class PythonBridge {
       'authorName': authorName,
       'authorEmail': authorEmail,
     });
-    return jsonDecode(raw) as Map<String, dynamic>;
+    return _decode(raw);
   }
 
   Future<Map<String, dynamic>> gitPush({
@@ -160,6 +179,6 @@ class PythonBridge {
       'username': username,
       'token': token,
     });
-    return jsonDecode(raw) as Map<String, dynamic>;
+    return _decode(raw);
   }
 }

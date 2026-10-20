@@ -303,7 +303,7 @@ def test_values():
     description: 'Write a function `greet(name)` that returns the string '
         '"Hello, NAME!" where NAME is the given name (e.g. '
         'greet("Ada") returns "Hello, Ada!").',
-    starterCode: 'def greet(name):\n    # your code here\n',
+    starterCode: 'def greet(name):\n    # your code here\n    pass\n',
     testCode: '''
 def test_greet():
     assert greet("Ada") == "Hello, Ada!"
@@ -318,7 +318,7 @@ def test_greet_other():
     title: 'Sign of a number',
     description: 'Write a function `sign(n)` that returns "positive", '
         '"negative" or "zero" depending on the number.',
-    starterCode: 'def sign(n):\n    # your code here\n',
+    starterCode: 'def sign(n):\n    # your code here\n    pass\n',
     testCode: '''
 def test_positive():
     assert sign(10) == "positive"
@@ -355,7 +355,7 @@ def test_ten():
     title: 'Temperature convert',
     description: 'Write a function `to_fahrenheit(celsius)` that converts '
         'Celsius to Fahrenheit. Formula: c * 9 / 5 + 32.',
-    starterCode: 'def to_fahrenheit(celsius):\n    # your code here\n',
+    starterCode: 'def to_fahrenheit(celsius):\n    # your code here\n    pass\n',
     testCode: '''
 def test_boiling():
     assert to_fahrenheit(100) == 212
@@ -373,7 +373,7 @@ def test_body_temp():
     title: 'Word lengths',
     description: 'Write a function `word_lengths(sentence)` that returns a '
         'list with the length of each word in the sentence.',
-    starterCode: 'def word_lengths(sentence):\n    # your code here\n',
+    starterCode: 'def word_lengths(sentence):\n    # your code here\n    pass\n',
     testCode: '''
 def test_basic():
     assert word_lengths("hello world") == [5, 5]

@@ -95,15 +95,18 @@ class PythonBridge(private val activity: Activity, engine: FlutterEngine) {
         val args = (arguments as? Map<String, Any?>) ?: emptyMap()
 
         when (method) {
-            "ping" -> result.success("pong")
+            // Goes through the worker so the interpreter really is warmed up.
+            "ping" -> onPythonThread(result) { _ -> "pong" }
 
             "checkSyntax" -> onPythonThread(result) { mod ->
                 mod.callAttr("check_syntax", args["source"] as String).toString()
             }
 
             "runCode" -> {
-                cancelRequested = false
                 onPythonThread(result) { mod ->
+                    // Reset when the job actually starts, not when it is queued,
+                    // so a Stop meant for the previous job is never erased.
+                    cancelRequested = false
                     mod.callAttr(
                         "run_code",
                         args["runId"] as String,
@@ -128,11 +131,11 @@ class PythonBridge(private val activity: Activity, engine: FlutterEngine) {
             }
 
             "debugRun" -> {
-                cancelRequested = false
-                pauseRequested = false
                 val breakpoints = (args["breakpoints"] as? List<*>)?.map { (it as Number).toInt() }
                     ?: emptyList()
                 onPythonThread(result) { mod ->
+                    cancelRequested = false
+                    pauseRequested = false
                     mod.callAttr(
                         "debug_run",
                         args["runId"] as String,
@@ -272,6 +275,8 @@ class PythonBridge(private val activity: Activity, engine: FlutterEngine) {
 
         /** Terminal-style input() support: ask Flutter, block until answered. */
         fun requestInput(runId: String, prompt: String): String {
+            // Drop any stale answer (e.g. a double-tapped Send) before asking.
+            inputLock.withLock { pendingInput = null }
             postEvent(
                 "input_request",
                 JSONObject().put("runId", runId).put("prompt", prompt)

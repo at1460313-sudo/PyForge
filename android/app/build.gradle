@@ -1,6 +1,6 @@
 plugins {
     id "com.android.application"
-   id "kotlin-android"
+    id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
     // Chaquopy: embeds a full CPython interpreter and our pyforge.* helpers.
     id "com.chaquo.python"
@@ -14,7 +14,7 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.pyforge.ide"
-    compileSdk = 35
+    compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -22,14 +22,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = '17'
-    }
-
     defaultConfig {
         applicationId = "com.pyforge.ide"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled true
@@ -58,6 +54,13 @@ android {
     }
 }
 
+// Kotlin 2.2+ removed the android { kotlinOptions {} } DSL (error, not warning).
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
 chaquopy {
     defaultConfig {
         // Python sources live in android/app/src/main/python (default sourceSet).
@@ -71,7 +74,8 @@ chaquopy {
             // Pure-Python Git implementation used by the version-control feature.
             // If this line ever breaks a build on your machine, remove it —
             // everything else keeps working (push becomes unavailable).
-           // install("dulwich==0.22.1")
+            // 0.22.1 has no pure-Python wheel (Chaquopy cannot build it); 0.22.8 does.
+            install("dulwich==0.22.8")
         }
     }
 }
