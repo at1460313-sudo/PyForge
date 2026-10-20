@@ -87,9 +87,9 @@ class _EditorScreenState extends State<EditorScreen> {
         path == null ? null : workspace.buffers[path];
     if (path == null || buffer == null) return;
     if (recordLines && buffer.isDirty) {
-      final int changed = diffLines(buffer.savedText, buffer.controller.text)
-          .where((DiffLine d) => d.action != DiffAction.equal)
-          .length;
+      // O(n+m) memory: never build the full diff just to count changes.
+      final int changed =
+          countChangedLines(buffer.savedText, buffer.controller.text);
       if (changed > 0) {
         unawaited(
             context.read<ProgressModel>().recordLinesWritten(changed));

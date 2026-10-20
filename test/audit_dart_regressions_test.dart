@@ -7,7 +7,10 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pyforge/services/python_bridge.dart';
+import 'package:flutter/material.dart';
 import 'package:pyforge/state/run_model.dart';
+import 'package:pyforge/ui/output_panel.dart';
+import 'package:pyforge/utils/ai_parsing.dart';
 
 Future<void> emit(Map<String, dynamic> event) async {
   await TestDefaultBinaryMessenger(event);
@@ -87,6 +90,86 @@ void main() {
     run.endDebugCapture(result);
     expect(run.lines.map((RunLine l) => l.text).join('\n'),
         contains('ZeroDivisionError'));
+  });
+
+  test('countChangedLines matches the diff it replaces', () {
+    const String a = 'one\ntwo\nthree\nfour';
+    const String b = 'one\nTWO\nthree\nfive';
+    final List<DiffLine> d = diffLines(a, b);
+    final int changed =
+        d.where((DiffLine x) => x.action != DiffAction.equal).length;
+    expect(countChangedLines(a, b), changed);
+    expect(countChangedLines(a, a), 0);
+    expect(countChangedLines('', 'x\ny'), 3); // '' counts as one line
+  });
+
+  test('diffLines edits apply cleanly', () {
+    const String a = 'keep\nold1\nold2\nkeep2';
+    const String b = 'keep\nnew1\nkeep2\ntail';
+    final List<DiffLine> d = diffLines(a, b);
+    final String back =
+        d.where((x) => x.action != DiffAction.insert).map((x) => x.text).join('\n');
+    final String forth =
+        d.where((x) => x.action != DiffAction.delete).map((x) => x.text).join('\n');
+    expect(back, a);
+    expect(forth, b);
+  });
+
+  test('input echo has no extra blank row', () async {
+    final RunModel run = RunModel()..wire();
+    run.runId = 'r1';
+    await emit({'type': 'input_request', 'runId': 'r1', 'prompt': ''});
+    expect(run.state, RunState.waitingInput);
+    await run.submitInput('hello');
+    expect(run.lines.last.text, 'hello'); // no trailing newline
+    expect(run.lines.last.stream, 'stdout');
+  });
+
+  testWidgets('terminal does not yank the view while scrolled up',
+      (WidgetTester tester) async {
+    final RunModel run = RunModel()..wire();
+    run.runId = 'r1';
+    for (int i = 0; i < 80; i++) {
+      await emit({
+        'type': 'output',
+        'runId': 'r1',
+        'stream': 'stdout',
+        'text': 'line $i\n',
+      });
+    }
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: OutputPanel(
+          run: run,
+          onExplainError: () {},
+          onFixError: () {},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    // Scrolling up to read must disable follow-the-output.
+    await tester.drag(find.byType(ListView), const Offset(0, 120));
+    await tester.pumpAndSettle();
+    final double before = tester
+        .state<ScrollableState>(find.byType(Scrollable).first)
+        .position
+        .pixels;
+    expect(before, lessThan(0.0) == false ? greaterThan(0.0) : greaterThan(0.0));
+    // New output arrives: the view must stay where the user put it.
+    for (int i = 100; i < 140; i++) {
+      await emit({
+        'type': 'output',
+        'runId': 'r1',
+        'stream': 'stdout',
+        'text': 'line $i\n',
+      });
+    }
+    await tester.pumpAndSettle();
+    final double after = tester
+        .state<ScrollableState>(find.byType(Scrollable).first)
+        .position
+        .pixels;
+    expect(after, before);
   });
 
   test('debugger.start works without an explicit runId', () async {

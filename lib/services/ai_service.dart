@@ -36,7 +36,10 @@ class AiConfig {
       case AiProvider.openrouter:
         return baseUrl.isEmpty ? provider.defaultBaseUrl : baseUrl;
       case AiProvider.custom:
-        return baseUrl;
+        // A trailing '/' would produce '...//chat/completions'.
+        return baseUrl.endsWith('/')
+            ? baseUrl.substring(0, baseUrl.length - 1)
+            : baseUrl;
     }
   }
 }

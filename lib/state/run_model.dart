@@ -165,7 +165,7 @@ class RunModel extends ChangeNotifier {
     state = RunState.running;
     inputPrompt = null;
     notifyListeners();
-    lines.add(RunLine(stream: 'stdout', text: '$text\n', open: false));
+    lines.add(RunLine(stream: 'stdout', text: text, open: false));
     await PythonBridge.instance.submitInput(text);
   }
 }

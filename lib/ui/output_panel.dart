@@ -25,6 +25,22 @@ class _OutputPanelState extends State<OutputPanel> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _inputController = TextEditingController();
   bool _collapsed = false;
+  // Follow-the-output only while the user is at the bottom; scrolling up to
+  // read must not be yanked back down on every new line.
+  bool _followOutput = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(() {
+      if (!_scrollController.hasClients) return;
+      final ScrollPosition pos = _scrollController.position;
+      final bool atBottom = pos.pixels >= pos.maxScrollExtent - 24;
+      if (atBottom != _followOutput) {
+        setState(() => _followOutput = atBottom);
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -182,7 +198,7 @@ class _OutputPanelState extends State<OutputPanel> {
     final ColorScheme scheme = Theme.of(context).colorScheme;
     final RunModel run = widget.run;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
+      if (_followOutput && _scrollController.hasClients) {
         _scrollController.jumpTo(
             _scrollController.position.maxScrollExtent);
       }

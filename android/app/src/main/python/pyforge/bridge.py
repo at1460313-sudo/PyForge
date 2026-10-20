@@ -8,10 +8,12 @@ The ``_BRIDGE`` object is the Kotlin ``PythonBridge.PyCallbacks`` instance.
 """
 import importlib
 import io
+import re
 import json
 import os
 import sys
 import time
+import threading
 import traceback
 
 _BRIDGE = None
@@ -41,13 +43,26 @@ class _StopDebug(BaseException):
 # Stream redirection: live output + input() support + Stop checks
 # ---------------------------------------------------------------------------
 
+# Batching: every print() is two write() calls, and each one used to be its
+# own method-channel message to the main thread. A loop of 100k prints would
+# flood the UI (including the Stop button) with events. Writes are now
+# coalesced: sent at most ~20x per second, or immediately once the buffer
+# grows past _OUTPUT_FLUSH_BYTES. flush() always forces a send.
+_OUTPUT_FLUSH_SECONDS = 0.05
+_OUTPUT_FLUSH_BYTES = 16384
+
+
 class _OutputStream(io.TextIOBase):
-    """Forwards writes to Flutter as they happen; aborts on Stop."""
+    """Forwards writes to Flutter in batches; aborts on Stop."""
 
     def __init__(self, run_id, name):
         super().__init__()
         self._run_id = run_id
         self._name = name
+        self._parts = []
+        self._buffered = 0
+        self._timer = None
+        self._lock = threading.Lock()
 
     def writable(self):
         return True
@@ -57,12 +72,40 @@ class _OutputStream(io.TextIOBase):
             return 0
         if _BRIDGE is not None and _BRIDGE.isCancelled():
             raise _Cancelled()
-        if _BRIDGE is not None:
-            _BRIDGE.onOutput(self._run_id, self._name, text)
+        with self._lock:
+            self._parts.append(text)
+            self._buffered += len(text)
+            if self._buffered >= _OUTPUT_FLUSH_BYTES:
+                self._send_locked()
+            elif self._timer is None:
+                self._timer = threading.Timer(
+                    _OUTPUT_FLUSH_SECONDS, self._flush)
+                self._timer.daemon = True
+                self._timer.start()
         return len(text)
 
+    def _send_locked(self):
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer = None
+        text = "".join(self._parts)
+        self._parts = []
+        self._buffered = 0
+        if text and _BRIDGE is not None:
+            _BRIDGE.onOutput(self._run_id, self._name, text)
+
+    def _flush(self):
+        with self._lock:
+            self._send_locked()
+
     def flush(self):
-        pass
+        self._flush()
+
+    def close(self):
+        try:
+            self._flush()
+        finally:
+            super().close()
 
 
 class _InputStream(io.TextIOBase):
@@ -178,6 +221,16 @@ def _restore(old_streams, old_cwd, snapshot=None, workspace_dir=None):
                 sys.modules.pop(name, None)
 
 
+def _flush_streams():
+    """Send any batched output before the real streams are swapped back in,
+    so everything a program printed is on screen before its result is."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except Exception:
+            pass
+
+
 def _exit_code(value):
     """Map SystemExit.code to a process-style integer (never raises)."""
     if value is None:
@@ -259,6 +312,7 @@ def run_code(run_id, file_path, source):
         result["ok"] = False
         result["error"] = _error_payload()
     finally:
+        _flush_streams()
         _restore(old_streams, old_cwd, snapshot, os.path.dirname(_CURRENT_USER_FILE))
         _CURRENT_USER_FILE = None
     return json.dumps(result)
@@ -349,6 +403,7 @@ def debug_run(run_id, file_path, source, breakpoints_json):
         result["error"] = _error_payload()
     finally:
         sys.settrace(None)
+        _flush_streams()
         _restore(old_streams, old_cwd, snapshot, os.path.dirname(target))
         _CURRENT_USER_FILE = None
     return json.dumps(result)
@@ -373,10 +428,28 @@ def list_packages():
     return json.dumps({"ok": True, "packages": packages})
 
 
+# Whitelist for pip arguments: a PEP 508-ish name, optional extras, and an
+# optional ==version pin. Anything else (notably anything starting with "-",
+# like --index-url or -r) is a pip *option*, not a package, and must never
+# reach pip.
+_PACKAGE_RE = re.compile(
+    r"^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?"
+    r"(\[[A-Za-z0-9,._-]+\])?"
+    r"(==[A-Za-z0-9.+!_-]+)?$"
+)
+
+
 def try_install_package(name):
     """Attempt a runtime pip install. Chaquopy bundles packages at *build*
     time; a runtime pip is not guaranteed to exist, so failures are reported
     honestly with a pointer to the build-time path."""
+    name = (name or "").strip()
+    if not _PACKAGE_RE.match(name):
+        return json.dumps({
+            "ok": False,
+            "message": f"{name!r} is not a valid package name "
+                      f"(name or name==version).",
+        })
     try:
         # Already importable under its likely module name?
         import importlib

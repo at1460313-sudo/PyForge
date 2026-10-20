@@ -94,7 +94,9 @@ def main():
     bridge.configure(fb)
     r = json.loads(bridge.run_code("r1", "/tmp/prog.py", "print('hello')\n"))
     check("runs ok", r["ok"] is True, str(r))
-    check("streams output", fb.outputs and fb.outputs[0][1] == "hello",
+    # Output is coalesced into batches (one per print here), so check the
+    # first batch contains the line instead of being exactly one write.
+    check("streams output", fb.outputs and "hello" in fb.outputs[0][1],
           str(fb.outputs))
 
     print("== input() ==")

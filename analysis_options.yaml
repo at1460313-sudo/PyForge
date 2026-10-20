@@ -9,3 +9,6 @@ analyzer:
   errors:
     # The Python method-channel bridge intentionally uses dynamic maps.
     avoid_dynamic_calls: ignore
+  exclude:
+    - build/**
+    - android/**

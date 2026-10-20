@@ -31,7 +31,10 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          # Pinned so a new stable release cannot break the build overnight.
+          # Bump deliberately, then re-run this workflow before merging.
           channel: stable
+          flutter-version: '3.47.7'
           cache: true
 
       - name: Generate Gradle wrapper and platform files

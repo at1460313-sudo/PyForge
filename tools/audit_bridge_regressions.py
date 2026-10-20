@@ -29,6 +29,7 @@ from pyforge import bridge
 class Callbacks:
     def __init__(self):
         self.outputs = []
+        self.calls = 0
 
     def isCancelled(self):
         return False
@@ -38,6 +39,7 @@ class Callbacks:
 
     def onOutput(self, run_id, stream, text):
         self.outputs.append((stream, text))
+        self.calls += 1
 
     def requestInput(self, run_id, prompt):
         return 'Ada'
@@ -66,6 +68,66 @@ class BridgeRegressions(unittest.TestCase):
                                           "raise SystemExit('goodbye')")
                 result = json.loads(raw)
                 self.assertEqual(result['exitCode'], 1)
+
+    def test_output_is_coalesced_not_flooded(self):
+        # 100 prints must not become 100+ method-channel messages.
+        bridge._OUTPUT_FLUSH_SECONDS = 0.5  # keep the whole run in one batch
+        try:
+            self.callbacks.outputs.clear()
+            self.callbacks.calls = 0
+            bridge.run_code('flood', '/tmp/flood.py',
+                            'for i in range(100):\n    print(i)')
+            # Everything is still delivered (flushed before the result).
+            text = ''.join(t for _, t in self.callbacks.outputs)
+            self.assertIn('99', text)
+            self.assertLess(self.callbacks.calls, 20)
+        finally:
+            bridge._OUTPUT_FLUSH_SECONDS = 0.05
+
+    def test_large_writes_flush_immediately(self):
+        # Above the byte cap, no waiting for the timer.
+        bridge._OUTPUT_FLUSH_SECONDS = 30  # would hang if the cap is broken
+        try:
+            self.callbacks.outputs.clear()
+            self.callbacks.calls = 0
+            bridge.run_code('big', '/tmp/big.py',
+                            'for i in range(2000):\n'
+                            '    print("x" * 20)')
+            text = ''.join(t for _, t in self.callbacks.outputs)
+            self.assertEqual(len(text), 2000 * 21)
+        finally:
+            bridge._OUTPUT_FLUSH_SECONDS = 0.05
+
+    def test_cancel_still_interrupts_between_flushes(self):
+        # The Stop check must stay per-write, not per-batch.
+        self.callbacks.stop_after = 5
+
+        class StopAfter(Callbacks):
+            def isCancelled(self):
+                self.stop_after -= 1
+                return self.stop_after < 0
+
+        stop = StopAfter()
+        stop.stop_after = 5
+        bridge.configure(stop)
+        result = json.loads(bridge.run_code('stop', '/tmp/s.py',
+                                            'while True:\n    print("y")'))
+        self.assertTrue(result.get('cancelled'))
+
+    def test_pip_options_are_rejected(self):
+        for bad in ('--index-url=http://evil.example', '-r reqs.txt',
+                    'requests; os.system("x")', '', 'pkg name'):
+            result = json.loads(bridge.try_install_package(bad))
+            self.assertFalse(result['ok'], bad)
+
+    def test_pip_names_are_accepted(self):
+        for good in ('requests', 'requests==2.31.0', 'numpy',
+                     'package-with-dash', 'pkg[extra1,extra2]'):
+            result = json.loads(bridge.try_install_package(good))
+            # ok=False is fine (no runtime pip on host); it must not be a
+            # validation rejection.
+            self.assertNotIn('not a valid package name',
+                              result.get('message', ''), good)
 
     def test_syntax_error_has_user_line(self):
         result = json.loads(bridge.run_code('syntax', '/tmp/example.py',

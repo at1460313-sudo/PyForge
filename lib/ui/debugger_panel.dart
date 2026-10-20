@@ -44,7 +44,9 @@ class DebuggerPanel extends StatelessWidget {
                     Icon(Icons.bug_report, size: 18, color: scheme.primary),
                     const SizedBox(width: 6),
                     Text(
-                      'Paused at line ${debugger.currentLine}',
+                      debugger.paused
+                          ? 'Paused at line ${debugger.currentLine}'
+                          : 'Running…',
                       style: const TextStyle(
                           fontWeight: FontWeight.w700, fontSize: 14),
                     ),
