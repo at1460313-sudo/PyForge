@@ -1,6 +1,6 @@
 plugins {
     id "com.android.application"
-    id "kotlin-android"
+   // id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
     // Chaquopy: embeds a full CPython interpreter and our pyforge.* helpers.
     id "com.chaquo.python"
@@ -22,9 +22,9 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = '17'
-    }
+   // kotlinOptions {
+   //     jvmTarget = '17'
+   // }
 
     defaultConfig {
         applicationId = "com.pyforge.ide"
