@@ -71,7 +71,7 @@ chaquopy {
             // Pure-Python Git implementation used by the version-control feature.
             // If this line ever breaks a build on your machine, remove it —
             // everything else keeps working (push becomes unavailable).
-            install("dulwich==0.22.1")
+           // install("dulwich==0.22.1")
         }
     }
 }
